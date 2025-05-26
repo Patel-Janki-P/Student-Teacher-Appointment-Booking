@@ -15,6 +15,7 @@ export default function TeacherDashboard() {
   const [appointments, setAppointments] = useState([]);
   const [pendingStudents, setPendingStudents] = useState([]);
   const [currentTeacherId, setCurrentTeacherId] = useState("");
+  const [messages, setMessages] = useState([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -27,9 +28,12 @@ export default function TeacherDashboard() {
     if (currentTeacherId) {
       fetchAppointments();
       fetchPendingStudents();
+      fetchMessages();
     }
   }, [currentTeacherId]);
 
+
+  // fetch appointment data and messages from students
   const fetchAppointments = async () => {
     const apptQuery = query(
       collection(db, "appointments"),
@@ -63,18 +67,51 @@ export default function TeacherDashboard() {
     setAppointments(enrichedAppts);
   };
 
+
+  // Fetch pending students for approval
   const fetchPendingStudents = async () => {
     const q = query(
       collection(db, "users"),
       where("role", "==", "student"),
       where("approved", "==", false),
-      where("assignedTeacherId", "==", currentTeacherId)
+      where("teacherId", "==", currentTeacherId)
     );
     const snapshot = await getDocs(q);
     const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     setPendingStudents(data);
   };
 
+  // Fetch messages from students
+    const fetchMessages = async () => {
+  const q = query(
+    collection(db, "messages"),
+    where("teacherId", "==", currentTeacherId)
+  );
+  const snapshot = await getDocs(q);
+  const rawMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+  // Extract unique studentIds
+  const studentIds = [...new Set(rawMessages.map(msg => msg.studentId))];
+
+  // Fetch student info
+  const studentQuery = query(collection(db, "users"), where("__name__", "in", studentIds));
+  const studentSnap = await getDocs(studentQuery);
+  const studentMap = {};
+  studentSnap.forEach(doc => {
+    studentMap[doc.id] = doc.data();
+  });
+
+  // Enrich messages
+  const enrichedMessages = rawMessages.map(msg => ({
+    ...msg,
+    studentName: studentMap[msg.studentId]?.fullName || "Unknown Student",
+  }));
+
+  setMessages(enrichedMessages);
+};
+
+
+  // Approve or reject student
   const approveStudent = async (id) => {
     await updateDoc(doc(db, "users", id), { approved: true });
     fetchPendingStudents();
@@ -85,6 +122,7 @@ export default function TeacherDashboard() {
     fetchPendingStudents();
   };
 
+  // Delete appointment
   const handleDeleteAppointment = async (id) => {
     await deleteDoc(doc(db, "appointments", id));
     // Update UI without re-fetching
@@ -178,6 +216,23 @@ export default function TeacherDashboard() {
           </table>
         )}
       </div>
+
+      {/* Student Messages */}
+      <div className="mt-10">
+        <h3 className="text-xl font-bold mb-4 p-2 bg-slate-300 rounded-xl">Student Messages</h3>
+        {messages.length === 0 ? (
+          <p className="text-gray-600">No messages from students.</p>
+        ) : (
+          <ul className="space-y-4">
+            {messages.map((msg, index) => (
+              <li key={msg.id} className="bg-white p-4 rounded shadow">
+                <p className="text-md mt-1">{msg.studentName} : {msg.message} </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
     </div>
   );
 }
