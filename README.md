@@ -160,6 +160,6 @@ npm run dev
 - Data is displayed in table format for clarity
 
 ## 🧑‍💻 Author
-- Developed by Janki Patel.
+Developed by JANKI PATEL.
 
 
